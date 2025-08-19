@@ -419,6 +419,7 @@ const ApiOptions = ({
 
 			{selectedProvider === "requesty" && (
 				<Requesty
+					uriScheme={uriScheme}
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
 					routerModels={routerModels}
