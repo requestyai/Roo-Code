@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useState } from "react"
 import { VSCodeCheckbox, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
+import { useCallback, useEffect, useState } from "react"
 
 import { type ProviderSettings, requestyDefaultModelId } from "@roo-code/types"
 
-import type { OrganizationAllowList } from "@roo/cloud"
 import type { RouterModels } from "@roo/api"
+import type { OrganizationAllowList } from "@roo/cloud"
 
-import { vscode } from "@src/utils/vscode"
-import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { VSCodeButtonLink } from "@src/components/common/VSCodeButtonLink"
 import { Button } from "@src/components/ui"
+import { useAppTranslation } from "@src/i18n/TranslationContext"
+import { vscode } from "@src/utils/vscode"
 
-import { inputEventTransform } from "../transforms"
+import { toRequestyServiceUrl } from "@roo/utils/requesty"
 import { ModelPicker } from "../ModelPicker"
+import { inputEventTransform } from "../transforms"
 import { RequestyBalanceDisplay } from "./RequestyBalanceDisplay"
 
 type RequestyProps = {
@@ -54,6 +55,14 @@ export const Requesty = ({
 		[setApiConfigurationField],
 	)
 
+	const getApiKeyUrl = () => {
+		if (apiConfiguration?.requestyBaseUrl) {
+			const appUrl = toRequestyServiceUrl(apiConfiguration.requestyBaseUrl, "app")
+			return new URL("api-keys", appUrl).toString()
+		}
+		return "https://app.requesty.ai/api-keys"
+	}
+
 	return (
 		<>
 			<VSCodeTextField
@@ -65,7 +74,10 @@ export const Requesty = ({
 				<div className="flex justify-between items-center mb-1">
 					<label className="block font-medium">{t("settings:providers.requestyApiKey")}</label>
 					{apiConfiguration?.requestyApiKey && (
-						<RequestyBalanceDisplay apiKey={apiConfiguration.requestyApiKey} />
+						<RequestyBalanceDisplay
+							baseUrl={apiConfiguration.requestyBaseUrl}
+							apiKey={apiConfiguration.requestyApiKey}
+						/>
 					)}
 				</div>
 			</VSCodeTextField>
@@ -74,7 +86,7 @@ export const Requesty = ({
 			</div>
 			{!apiConfiguration?.requestyApiKey && (
 				<VSCodeButtonLink
-					href="https://app.requesty.ai/api-keys"
+					href={getApiKeyUrl()}
 					style={{ width: "100%" }}
 					appearance="primary">
 					{t("settings:providers.getRequestyApiKey")}
