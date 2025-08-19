@@ -6,12 +6,11 @@ import { type ProviderSettings, requestyDefaultModelId } from "@roo-code/types"
 import type { RouterModels } from "@roo/api"
 import type { OrganizationAllowList } from "@roo/cloud"
 
-import { VSCodeButtonLink } from "@src/components/common/VSCodeButtonLink"
 import { Button } from "@src/components/ui"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { vscode } from "@src/utils/vscode"
+import { getCallbackUrl } from "../../../oauth/urls"
 
-import { toRequestyServiceUrl } from "@roo/utils/requesty"
 import { ModelPicker } from "../ModelPicker"
 import { inputEventTransform } from "../transforms"
 import { RequestyBalanceDisplay } from "./RequestyBalanceDisplay"
@@ -23,6 +22,7 @@ type RequestyProps = {
 	refetchRouterModels: () => void
 	organizationAllowList: OrganizationAllowList
 	modelValidationError?: string
+	uriScheme?: string
 }
 
 export const Requesty = ({
@@ -32,6 +32,7 @@ export const Requesty = ({
 	refetchRouterModels,
 	organizationAllowList,
 	modelValidationError,
+	uriScheme,
 }: RequestyProps) => {
 	const { t } = useAppTranslation()
 
@@ -56,11 +57,12 @@ export const Requesty = ({
 	)
 
 	const getApiKeyUrl = () => {
+		const callbackUrl = getCallbackUrl("requesty", uriScheme)
 		if (apiConfiguration?.requestyBaseUrl) {
-			const appUrl = toRequestyServiceUrl(apiConfiguration.requestyBaseUrl, "app")
-			return new URL("api-keys", appUrl).toString()
+			const appUrl = apiConfiguration.requestyBaseUrl.replace("router", "app").replace("/v1", "")
+			return `${appUrl}/oauth/authorize?callback_url=${callbackUrl}`
 		}
-		return "https://app.requesty.ai/api-keys"
+		return `http://localhost:3000/oauth/authorize?callback_url=${callbackUrl}`
 	}
 
 	return (
@@ -85,12 +87,19 @@ export const Requesty = ({
 				{t("settings:providers.apiKeyStorageNotice")}
 			</div>
 			{!apiConfiguration?.requestyApiKey && (
-				<VSCodeButtonLink
+				<a
 					href={getApiKeyUrl()}
-					style={{ width: "100%" }}
-					appearance="primary">
+					target="_blank"
+					rel="noopener noreferrer"
+					className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 rounded-md px-3 w-full"
+					style={{
+						width: "100%",
+						textDecoration: "none",
+						color: "var(--vscode-button-foreground)",
+						backgroundColor: "var(--vscode-button-background)",
+					}}>
 					{t("settings:providers.getRequestyApiKey")}
-				</VSCodeButtonLink>
+				</a>
 			)}
 
 			<VSCodeCheckbox

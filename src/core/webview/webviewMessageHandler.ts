@@ -1,59 +1,49 @@
-import { safeWriteJson } from "../../utils/safeWriteJson"
-import * as path from "path"
-import * as os from "os"
 import * as fs from "fs/promises"
+import * as os from "os"
 import pWaitFor from "p-wait-for"
+import * as path from "path"
 import * as vscode from "vscode"
-import * as yaml from "yaml"
+import { safeWriteJson } from "../../utils/safeWriteJson"
 
-import {
-	type Language,
-	type ProviderSettings,
-	type GlobalState,
-	type ClineMessage,
-	TelemetryEventName,
-} from "@roo-code/types"
 import { CloudService } from "@roo-code/cloud"
 import { TelemetryService } from "@roo-code/telemetry"
+import { type ClineMessage, type GlobalState, type Language, TelemetryEventName } from "@roo-code/types"
 import { type ApiMessage } from "../task-persistence/apiMessages"
 
-import { ClineProvider } from "./ClineProvider"
 import { changeLanguage, t } from "../../i18n"
+import { ModelRecord, RouterName, toRouterName } from "../../shared/api"
 import { Package } from "../../shared/package"
-import { RouterName, toRouterName, ModelRecord } from "../../shared/api"
-import { supportPrompt } from "../../shared/support-prompt"
+import { ClineProvider } from "./ClineProvider"
 import { MessageEnhancer } from "./messageEnhancer"
 
-import { checkoutDiffPayloadSchema, checkoutRestorePayloadSchema, WebviewMessage } from "../../shared/WebviewMessage"
-import { checkExistKey } from "../../shared/checkExistApiConfig"
-import { experimentDefault } from "../../shared/experiments"
-import { Terminal } from "../../integrations/terminal/Terminal"
-import { openFile } from "../../integrations/misc/open-file"
-import { CodeIndexManager } from "../../services/code-index/manager"
+import { flushModels, getModels } from "../../api/providers/fetchers/modelCache"
+import { getOpenAiModels } from "../../api/providers/openai"
+import { getVsCodeLmModels } from "../../api/providers/vscode-lm"
 import { openImage, saveImage } from "../../integrations/misc/image-handler"
+import { openFile } from "../../integrations/misc/open-file"
 import { selectImages } from "../../integrations/misc/process-images"
+import { Terminal } from "../../integrations/terminal/Terminal"
 import { getTheme } from "../../integrations/theme/getTheme"
 import { discoverChromeHostUrl, tryChromeHostUrl } from "../../services/browser/browserDiscovery"
 import { searchWorkspaceFiles } from "../../services/search/file-search"
-import { fileExistsAtPath } from "../../utils/fs"
-import { playTts, setTtsEnabled, setTtsSpeed, stopTts } from "../../utils/tts"
-import { searchCommits } from "../../utils/git"
-import { exportSettings, importSettingsWithFeedback } from "../config/importExport"
-import { getOpenAiModels } from "../../api/providers/openai"
-import { getVsCodeLmModels } from "../../api/providers/vscode-lm"
-import { openMention } from "../mentions"
 import { TelemetrySetting } from "../../shared/TelemetrySetting"
-import { getWorkspacePath } from "../../utils/path"
-import { ensureSettingsDirectoryExists } from "../../utils/globalContext"
-import { Mode, defaultModeSlug } from "../../shared/modes"
-import { getModels, flushModels } from "../../api/providers/fetchers/modelCache"
+import { checkoutDiffPayloadSchema, checkoutRestorePayloadSchema, WebviewMessage } from "../../shared/WebviewMessage"
 import { GetModelsOptions } from "../../shared/api"
-import { generateSystemPrompt } from "./generateSystemPrompt"
+import { checkExistKey } from "../../shared/checkExistApiConfig"
+import { experimentDefault } from "../../shared/experiments"
+import { defaultModeSlug, Mode } from "../../shared/modes"
 import { getCommand } from "../../utils/commands"
+import { fileExistsAtPath } from "../../utils/fs"
+import { searchCommits } from "../../utils/git"
+import { getWorkspacePath } from "../../utils/path"
+import { playTts, setTtsEnabled, setTtsSpeed, stopTts } from "../../utils/tts"
+import { exportSettings, importSettingsWithFeedback } from "../config/importExport"
+import { openMention } from "../mentions"
+import { generateSystemPrompt } from "./generateSystemPrompt"
 
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
-import { MarketplaceManager, MarketplaceItemType } from "../../services/marketplace"
+import { MarketplaceItemType, MarketplaceManager } from "../../services/marketplace"
 import { setPendingTodoList } from "../tools/updateTodoListTool"
 
 export const webviewMessageHandler = async (
@@ -548,7 +538,14 @@ export const webviewMessageHandler = async (
 
 			const modelFetchPromises: Array<{ key: RouterName; options: GetModelsOptions }> = [
 				{ key: "openrouter", options: { provider: "openrouter" } },
-				{ key: "requesty", options: { provider: "requesty", apiKey: apiConfiguration.requestyApiKey } },
+				{
+					key: "requesty",
+					options: {
+						provider: "requesty",
+						apiKey: apiConfiguration.requestyApiKey,
+						baseUrl: apiConfiguration.requestyBaseUrl,
+					},
+				},
 				{ key: "glama", options: { provider: "glama" } },
 				{ key: "unbound", options: { provider: "unbound", apiKey: apiConfiguration.unboundApiKey } },
 			]

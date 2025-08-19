@@ -13,5 +13,5 @@ export function getOpenRouterAuthUrl(uriScheme?: string) {
 }
 
 export function getRequestyAuthUrl(uriScheme?: string) {
-	return `https://app.requesty.ai/oauth/authorize?callback_url=${getCallbackUrl("requesty", uriScheme)}`
+	return `http://localhost:3000/oauth/authorize?callback_url=${getCallbackUrl("requesty", uriScheme)}`
 }

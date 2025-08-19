@@ -1,74 +1,74 @@
+import EventEmitter from "events"
+import fs from "fs/promises"
 import os from "os"
 import * as path from "path"
-import fs from "fs/promises"
-import EventEmitter from "events"
 
 import { Anthropic } from "@anthropic-ai/sdk"
-import delay from "delay"
 import axios from "axios"
+import delay from "delay"
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 
+import { type CloudUserInfo, CloudService, ORGANIZATION_ALLOW_ALL, getRooCodeApiUrl } from "@roo-code/cloud"
+import { TelemetryService } from "@roo-code/telemetry"
 import {
-	type TaskProviderLike,
-	type TaskProviderEvents,
-	type GlobalState,
-	type ProviderName,
-	type ProviderSettings,
-	type RooCodeSettings,
-	type ProviderSettingsEntry,
-	type StaticAppProperties,
-	type DynamicAppProperties,
 	type CloudAppProperties,
-	type TaskProperties,
-	type GitProperties,
-	type TelemetryProperties,
-	type TelemetryPropertiesProvider,
 	type CodeActionId,
 	type CodeActionName,
+	type DynamicAppProperties,
+	type GitProperties,
+	type GlobalState,
+	type HistoryItem,
+	type ProviderName,
+	type ProviderSettings,
+	type ProviderSettingsEntry,
+	type RooCodeSettings,
+	type StaticAppProperties,
+	type TaskProperties,
+	type TaskProviderEvents,
+	type TaskProviderLike,
+	type TelemetryProperties,
+	type TelemetryPropertiesProvider,
 	type TerminalActionId,
 	type TerminalActionPromptType,
-	type HistoryItem,
-	RooCodeEventName,
-	requestyDefaultModelId,
-	openRouterDefaultModelId,
-	glamaDefaultModelId,
 	DEFAULT_TERMINAL_OUTPUT_CHARACTER_LIMIT,
 	DEFAULT_WRITE_DELAY_MS,
+	RooCodeEventName,
+	glamaDefaultModelId,
+	openRouterDefaultModelId,
+	requestyDefaultModelId,
 } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
-import { type CloudUserInfo, CloudService, ORGANIZATION_ALLOW_ALL, getRooCodeApiUrl } from "@roo-code/cloud"
 
-import { Package } from "../../shared/package"
 import { findLast } from "../../shared/array"
-import { supportPrompt } from "../../shared/support-prompt"
-import { GlobalFileNames } from "../../shared/globalFileNames"
-import { ExtensionMessage, MarketplaceInstalledMetadata } from "../../shared/ExtensionMessage"
-import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import { experimentDefault } from "../../shared/experiments"
-import { formatLanguage } from "../../shared/language"
-import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
+import { experimentDefault } from "../../shared/experiments"
+import { ExtensionMessage, MarketplaceInstalledMetadata } from "../../shared/ExtensionMessage"
+import { GlobalFileNames } from "../../shared/globalFileNames"
+import { formatLanguage } from "../../shared/language"
+import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
+import { Package } from "../../shared/package"
 import { ProfileValidator } from "../../shared/ProfileValidator"
+import { supportPrompt } from "../../shared/support-prompt"
+import { WebviewMessage } from "../../shared/WebviewMessage"
 
-import { Terminal } from "../../integrations/terminal/Terminal"
 import { downloadTask } from "../../integrations/misc/export-markdown"
+import { Terminal } from "../../integrations/terminal/Terminal"
 import { getTheme } from "../../integrations/theme/getTheme"
 import WorkspaceTracker from "../../integrations/workspace/WorkspaceTracker"
 
+import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
+import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
+import { CodeIndexManager } from "../../services/code-index/manager"
+import { MarketplaceManager } from "../../services/marketplace"
 import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
-import { MarketplaceManager } from "../../services/marketplace"
-import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
-import { CodeIndexManager } from "../../services/code-index/manager"
-import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
 import { MdmService } from "../../services/mdm/MdmService"
 
 import { fileExistsAtPath } from "../../utils/fs"
-import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 import { getWorkspaceGitInfo } from "../../utils/git"
 import { getWorkspacePath } from "../../utils/path"
 import { isRemoteControlEnabled } from "../../utils/remoteControl"
+import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 
 import { setPanel } from "../../activate/registerCommands"
 
@@ -78,14 +78,14 @@ import { buildApiHandler } from "../../api"
 import { forceFullModelDetailsLoad, hasLoadedFullDetails } from "../../api/providers/fetchers/lmstudio"
 
 import { ContextProxy } from "../config/ContextProxy"
-import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { CustomModesManager } from "../config/CustomModesManager"
-import { Task, TaskOptions } from "../task/Task"
+import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { getSystemPromptFilePath } from "../prompts/sections/custom-system-prompt"
+import { Task, TaskOptions } from "../task/Task"
 
-import { webviewMessageHandler } from "./webviewMessageHandler"
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
+import { webviewMessageHandler } from "./webviewMessageHandler"
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -1405,7 +1405,9 @@ export class ClineProvider
 			requestyModelId: apiConfiguration?.requestyModelId || requestyDefaultModelId,
 		}
 
-		await this.upsertProviderProfile(currentApiConfigName, newConfiguration)
+		// Create a new profile with a unique name to trigger settings refresh
+		const newProfileName = currentApiConfigName === "default" ? "requesty-oauth" : currentApiConfigName
+		await this.upsertProviderProfile(newProfileName, newConfiguration)
 	}
 
 	// Task history

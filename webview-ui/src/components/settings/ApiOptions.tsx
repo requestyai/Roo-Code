@@ -1,61 +1,61 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react"
-import { convertHeadersToObject } from "./utils/headers"
-import { useDebounce } from "react-use"
-import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
 import { ExternalLinkIcon } from "@radix-ui/react-icons"
+import { VSCodeLink } from "@vscode/webview-ui-toolkit/react"
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { useDebounce } from "react-use"
+import { convertHeadersToObject } from "./utils/headers"
 
 import {
 	type ProviderName,
 	type ProviderSettings,
-	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
-	openRouterDefaultModelId,
-	requestyDefaultModelId,
-	glamaDefaultModelId,
-	unboundDefaultModelId,
-	litellmDefaultModelId,
-	openAiNativeDefaultModelId,
 	anthropicDefaultModelId,
-	doubaoDefaultModelId,
-	claudeCodeDefaultModelId,
-	geminiDefaultModelId,
-	deepSeekDefaultModelId,
-	moonshotDefaultModelId,
-	mistralDefaultModelId,
-	xaiDefaultModelId,
-	groqDefaultModelId,
+	bedrockDefaultModelId,
 	cerebrasDefaultModelId,
 	chutesDefaultModelId,
-	bedrockDefaultModelId,
-	vertexDefaultModelId,
-	sambaNovaDefaultModelId,
-	internationalZAiDefaultModelId,
-	mainlandZAiDefaultModelId,
+	claudeCodeDefaultModelId,
+	deepSeekDefaultModelId,
+	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
+	doubaoDefaultModelId,
 	fireworksDefaultModelId,
+	geminiDefaultModelId,
+	glamaDefaultModelId,
+	groqDefaultModelId,
+	internationalZAiDefaultModelId,
 	ioIntelligenceDefaultModelId,
+	litellmDefaultModelId,
+	mainlandZAiDefaultModelId,
+	mistralDefaultModelId,
+	moonshotDefaultModelId,
+	openAiNativeDefaultModelId,
+	openRouterDefaultModelId,
+	requestyDefaultModelId,
+	sambaNovaDefaultModelId,
+	unboundDefaultModelId,
+	vertexDefaultModelId,
+	xaiDefaultModelId,
 } from "@roo-code/types"
 
-import { vscode } from "@src/utils/vscode"
-import { validateApiConfigurationExcludingModelErrors, getModelValidationError } from "@src/utils/validate"
-import { useAppTranslation } from "@src/i18n/TranslationContext"
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	SearchableSelect,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@src/components/ui"
+import {
+	OPENROUTER_DEFAULT_PROVIDER_NAME,
+	useOpenRouterModelProviders,
+} from "@src/components/ui/hooks/useOpenRouterModelProviders"
 import { useRouterModels } from "@src/components/ui/hooks/useRouterModels"
 import { useSelectedModel } from "@src/components/ui/hooks/useSelectedModel"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
-import {
-	useOpenRouterModelProviders,
-	OPENROUTER_DEFAULT_PROVIDER_NAME,
-} from "@src/components/ui/hooks/useOpenRouterModelProviders"
-import { filterProviders, filterModels } from "./utils/organizationFilters"
-import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-	SearchableSelect,
-	Collapsible,
-	CollapsibleTrigger,
-	CollapsibleContent,
-} from "@src/components/ui"
+import { useAppTranslation } from "@src/i18n/TranslationContext"
+import { getModelValidationError, validateApiConfigurationExcludingModelErrors } from "@src/utils/validate"
+import { vscode } from "@src/utils/vscode"
+import { filterModels, filterProviders } from "./utils/organizationFilters"
 
 import {
 	Anthropic,
@@ -65,13 +65,14 @@ import {
 	ClaudeCode,
 	DeepSeek,
 	Doubao,
+	Fireworks,
 	Gemini,
 	Glama,
 	Groq,
 	HuggingFace,
 	IOIntelligence,
-	LMStudio,
 	LiteLLM,
+	LMStudio,
 	Mistral,
 	Moonshot,
 	Ollama,
@@ -85,22 +86,21 @@ import {
 	VSCodeLM,
 	XAI,
 	ZAi,
-	Fireworks,
 } from "./providers"
 
-import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
-import { inputEventTransform, noTransform } from "./transforms"
-import { ModelInfoView } from "./ModelInfoView"
-import { ApiErrorMessage } from "./ApiErrorMessage"
-import { ThinkingBudget } from "./ThinkingBudget"
-import { Verbosity } from "./Verbosity"
-import { DiffSettingsControl } from "./DiffSettingsControl"
-import { TodoListSettingsControl } from "./TodoListSettingsControl"
-import { TemperatureControl } from "./TemperatureControl"
-import { RateLimitSecondsControl } from "./RateLimitSecondsControl"
-import { ConsecutiveMistakeLimitControl } from "./ConsecutiveMistakeLimitControl"
-import { BedrockCustomArn } from "./providers/BedrockCustomArn"
 import { buildDocLink } from "@src/utils/docLinks"
+import { ApiErrorMessage } from "./ApiErrorMessage"
+import { ConsecutiveMistakeLimitControl } from "./ConsecutiveMistakeLimitControl"
+import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
+import { DiffSettingsControl } from "./DiffSettingsControl"
+import { ModelInfoView } from "./ModelInfoView"
+import { BedrockCustomArn } from "./providers/BedrockCustomArn"
+import { RateLimitSecondsControl } from "./RateLimitSecondsControl"
+import { TemperatureControl } from "./TemperatureControl"
+import { ThinkingBudget } from "./ThinkingBudget"
+import { TodoListSettingsControl } from "./TodoListSettingsControl"
+import { inputEventTransform, noTransform } from "./transforms"
+import { Verbosity } from "./Verbosity"
 
 export interface ApiOptionsProps {
 	uriScheme: string | undefined
@@ -419,6 +419,7 @@ const ApiOptions = ({
 
 			{selectedProvider === "requesty" && (
 				<Requesty
+					uriScheme={uriScheme}
 					apiConfiguration={apiConfiguration}
 					setApiConfigurationField={setApiConfigurationField}
 					routerModels={routerModels}
