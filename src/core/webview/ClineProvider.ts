@@ -1,78 +1,78 @@
+import EventEmitter from "events"
+import fs from "fs/promises"
 import os from "os"
 import * as path from "path"
-import fs from "fs/promises"
-import EventEmitter from "events"
 
 import { Anthropic } from "@anthropic-ai/sdk"
-import delay from "delay"
 import axios from "axios"
+import delay from "delay"
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 
+import { BridgeOrchestrator, CloudService, getRooCodeApiUrl } from "@roo-code/cloud"
+import { TelemetryService } from "@roo-code/telemetry"
 import {
-	type TaskProviderLike,
-	type TaskProviderEvents,
-	type GlobalState,
-	type ProviderName,
-	type ProviderSettings,
-	type RooCodeSettings,
-	type ProviderSettingsEntry,
-	type StaticAppProperties,
-	type DynamicAppProperties,
 	type CloudAppProperties,
-	type TaskProperties,
-	type GitProperties,
-	type TelemetryProperties,
-	type TelemetryPropertiesProvider,
+	type CloudUserInfo,
 	type CodeActionId,
 	type CodeActionName,
-	type TerminalActionId,
-	type TerminalActionPromptType,
-	type HistoryItem,
-	type CloudUserInfo,
 	type CreateTaskOptions,
-	RooCodeEventName,
-	requestyDefaultModelId,
-	openRouterDefaultModelId,
-	glamaDefaultModelId,
+	DEFAULT_MODES,
 	DEFAULT_TERMINAL_OUTPUT_CHARACTER_LIMIT,
 	DEFAULT_WRITE_DELAY_MS,
+	type DynamicAppProperties,
+	type GitProperties,
+	type GlobalState,
+	type HistoryItem,
 	ORGANIZATION_ALLOW_ALL,
-	DEFAULT_MODES,
+	type ProviderName,
+	type ProviderSettings,
+	type ProviderSettingsEntry,
+	RooCodeEventName,
+	type RooCodeSettings,
+	type StaticAppProperties,
+	type TaskProperties,
+	type TaskProviderEvents,
+	type TaskProviderLike,
+	type TelemetryProperties,
+	type TelemetryPropertiesProvider,
+	type TerminalActionId,
+	type TerminalActionPromptType,
+	glamaDefaultModelId,
+	openRouterDefaultModelId,
+	requestyDefaultModelId,
 } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
-import { CloudService, BridgeOrchestrator, getRooCodeApiUrl } from "@roo-code/cloud"
 
-import { Package } from "../../shared/package"
 import { findLast } from "../../shared/array"
-import { supportPrompt } from "../../shared/support-prompt"
-import { GlobalFileNames } from "../../shared/globalFileNames"
-import { ExtensionMessage, MarketplaceInstalledMetadata } from "../../shared/ExtensionMessage"
-import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import { experimentDefault } from "../../shared/experiments"
-import { formatLanguage } from "../../shared/language"
-import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
+import { experimentDefault } from "../../shared/experiments"
+import { ExtensionMessage, MarketplaceInstalledMetadata } from "../../shared/ExtensionMessage"
+import { GlobalFileNames } from "../../shared/globalFileNames"
+import { formatLanguage } from "../../shared/language"
+import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
+import { Package } from "../../shared/package"
 import { ProfileValidator } from "../../shared/ProfileValidator"
+import { supportPrompt } from "../../shared/support-prompt"
+import { WebviewMessage } from "../../shared/WebviewMessage"
 
-import { Terminal } from "../../integrations/terminal/Terminal"
 import { downloadTask } from "../../integrations/misc/export-markdown"
+import { Terminal } from "../../integrations/terminal/Terminal"
 import { getTheme } from "../../integrations/theme/getTheme"
 import WorkspaceTracker from "../../integrations/workspace/WorkspaceTracker"
 
+import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
+import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
+import { CodeIndexManager } from "../../services/code-index/manager"
+import { MarketplaceManager } from "../../services/marketplace"
 import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
-import { MarketplaceManager } from "../../services/marketplace"
-import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
-import { CodeIndexManager } from "../../services/code-index/manager"
-import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
 import { MdmService } from "../../services/mdm/MdmService"
 
+import { OrganizationAllowListViolationError } from "../../utils/errors"
 import { fileExistsAtPath } from "../../utils/fs"
-import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 import { getWorkspaceGitInfo } from "../../utils/git"
 import { getWorkspacePath } from "../../utils/path"
-import { OrganizationAllowListViolationError } from "../../utils/errors"
+import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 
 import { setPanel } from "../../activate/registerCommands"
 
@@ -82,14 +82,15 @@ import { buildApiHandler } from "../../api"
 import { forceFullModelDetailsLoad, hasLoadedFullDetails } from "../../api/providers/fetchers/lmstudio"
 
 import { ContextProxy } from "../config/ContextProxy"
-import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { CustomModesManager } from "../config/CustomModesManager"
-import { Task } from "../task/Task"
+import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { getSystemPromptFilePath } from "../prompts/sections/custom-system-prompt"
+import { Task } from "../task/Task"
 
-import { webviewMessageHandler } from "./webviewMessageHandler"
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
+import { StateManager } from "./helpers/StateManager"
+import { webviewMessageHandler } from "./webviewMessageHandler"
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -119,13 +120,12 @@ export class ClineProvider
 	private taskCreationCallback: (task: Task) => void
 	private taskEventListeners: WeakMap<Task, Array<() => void>> = new WeakMap()
 
-	private recentTasksCache?: string[]
-
 	public isViewLaunched = false
 	public settingsImportedAt?: number
 	public readonly latestAnnouncementId = "aug-25-2025-grok-code-fast" // Update for Grok Code Fast announcement
 	public readonly providerSettingsManager: ProviderSettingsManager
 	public readonly customModesManager: CustomModesManager
+	private readonly stateManager: StateManager
 
 	constructor(
 		readonly context: vscode.ExtensionContext,
@@ -139,7 +139,8 @@ export class ClineProvider
 		ClineProvider.activeInstances.add(this)
 
 		this.mdmService = mdmService
-		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
+		this.stateManager = new StateManager(this.contextProxy, this.cwd)
+		this.stateManager.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Start configuration loading (which might trigger indexing) in the background.
 		// Don't await, allowing activation to continue immediately.
@@ -1376,7 +1377,6 @@ export class ClineProvider
 		const taskHistory = this.getGlobalState("taskHistory") ?? []
 		const updatedTaskHistory = taskHistory.filter((task) => task.id !== id)
 		await this.updateGlobalState("taskHistory", updatedTaskHistory)
-		this.recentTasksCache = undefined
 		await this.postStateToWebview()
 	}
 
@@ -1929,19 +1929,7 @@ export class ClineProvider
 	}
 
 	async updateTaskHistory(item: HistoryItem): Promise<HistoryItem[]> {
-		const history = (this.getGlobalState("taskHistory") as HistoryItem[] | undefined) || []
-		const existingItemIndex = history.findIndex((h) => h.id === item.id)
-
-		if (existingItemIndex !== -1) {
-			history[existingItemIndex] = item
-		} else {
-			history.push(item)
-		}
-
-		await this.updateGlobalState("taskHistory", history)
-		this.recentTasksCache = undefined
-
-		return history
+		return await this.stateManager.updateTaskHistory(item)
 	}
 
 	// ContextProxy
@@ -2150,48 +2138,7 @@ export class ClineProvider
 	}
 
 	public getRecentTasks(): string[] {
-		if (this.recentTasksCache) {
-			return this.recentTasksCache
-		}
-
-		const history = this.getGlobalState("taskHistory") ?? []
-		const workspaceTasks: HistoryItem[] = []
-
-		for (const item of history) {
-			if (!item.ts || !item.task || item.workspace !== this.cwd) {
-				continue
-			}
-
-			workspaceTasks.push(item)
-		}
-
-		if (workspaceTasks.length === 0) {
-			this.recentTasksCache = []
-			return this.recentTasksCache
-		}
-
-		workspaceTasks.sort((a, b) => b.ts - a.ts)
-		let recentTaskIds: string[] = []
-
-		if (workspaceTasks.length >= 100) {
-			// If we have at least 100 tasks, return tasks from the last 7 days.
-			const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-
-			for (const item of workspaceTasks) {
-				// Stop when we hit tasks older than 7 days.
-				if (item.ts < sevenDaysAgo) {
-					break
-				}
-
-				recentTaskIds.push(item.id)
-			}
-		} else {
-			// Otherwise, return the most recent 100 tasks (or all if less than 100).
-			recentTaskIds = workspaceTasks.slice(0, Math.min(100, workspaceTasks.length)).map((item) => item.id)
-		}
-
-		this.recentTasksCache = recentTaskIds
-		return this.recentTasksCache
+		return this.stateManager.getRecentTasks()
 	}
 
 	// When initializing a new task, (not from history but from a tool command
