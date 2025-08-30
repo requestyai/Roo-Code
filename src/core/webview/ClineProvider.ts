@@ -308,15 +308,13 @@ export class ClineProvider
 		}
 	}
 
-	// Adds a new Task instance to clineStack, marking the start of a new task.
+	// Adds a new Task instance to task stack, marking the start of a new task.
 	// The instance is pushed to the top of the stack (LIFO order).
 	// When the task is completed, the top instance is removed, reactivating the
 	// previous task.
 	async addClineToStack(task: Task) {
-		// Add this cline instance into the stack that represents the order of
-		// all the called tasks.
-		this.clineStack.push(task)
-		task.emit(RooCodeEventName.TaskFocused)
+		// Add task to TaskManager stack
+		await this.taskManager.addTaskToStack(task)
 
 		// Perform special setup provider specific tasks.
 		await this.performPreparationTasks(task)
@@ -350,38 +348,7 @@ export class ClineProvider
 	// Removes and destroys the top Cline instance (the current finished task),
 	// activating the previous one (resuming the parent task).
 	async removeClineFromStack() {
-		if (this.clineStack.length === 0) {
-			return
-		}
-
-		// Pop the top Cline instance from the stack.
-		let task = this.clineStack.pop()
-
-		if (task) {
-			task.emit(RooCodeEventName.TaskUnfocused)
-
-			try {
-				// Abort the running task and set isAbandoned to true so
-				// all running promises will exit as well.
-				await task.abortTask(true)
-			} catch (e) {
-				this.log(
-					`[ClineProvider#removeClineFromStack] abortTask() failed ${task.taskId}.${task.instanceId}: ${e.message}`,
-				)
-			}
-
-			// Remove event listeners before clearing the reference.
-			const cleanupFunctions = this.taskEventListeners.get(task)
-
-			if (cleanupFunctions) {
-				cleanupFunctions.forEach((cleanup) => cleanup())
-				this.taskEventListeners.delete(task)
-			}
-
-			// Make sure no reference kept, once promises end it will be
-			// garbage collected.
-			task = undefined
-		}
+		await this.taskManager.removeTaskFromStack()
 	}
 
 	getTaskStackSize(): number {
@@ -424,11 +391,7 @@ export class ClineProvider
 		this.log("Disposing ClineProvider...")
 
 		// Clear all tasks from the stack.
-		while (this.clineStack.length > 0) {
-			await this.removeClineFromStack()
-		}
-
-		this.log("Cleared all tasks")
+		await this.taskManager.clearAllTasks()
 
 		if (this.view && "dispose" in this.view) {
 			this.view.dispose()
@@ -1315,13 +1278,7 @@ export class ClineProvider
 
 	/* Condenses a task's message history to use fewer tokens. */
 	async condenseTaskContext(taskId: string) {
-		let task: Task | undefined
-		for (let i = this.clineStack.length - 1; i >= 0; i--) {
-			if (this.clineStack[i].taskId === taskId) {
-				task = this.clineStack[i]
-				break
-			}
-		}
+		const task = this.taskManager.findTaskById(taskId)
 		if (!task) {
 			throw new Error(`Task with id ${taskId} not found in stack`)
 		}
@@ -2060,7 +2017,7 @@ export class ClineProvider
 				}
 			}
 		} else {
-			for (const task of this.clineStack) {
+			for (const task of this.taskManager.getAllTasks()) {
 				if (task.enableBridge) {
 					try {
 						await BridgeOrchestrator.getInstance()?.unsubscribeFromTask(task.taskId)
@@ -2209,9 +2166,9 @@ export class ClineProvider
 			task: text,
 			images,
 			experiments,
-			rootTask: this.clineStack.length > 0 ? this.clineStack[0] : undefined,
+			rootTask: this.taskManager.getRootTask(),
 			parentTask,
-			taskNumber: this.clineStack.length + 1,
+			taskNumber: this.taskManager.getTaskStackSize() + 1,
 			onCreated: this.taskCreationCallback,
 			enableBridge: BridgeOrchestrator.isEnabled(cloudUserInfo, remoteControlEnabled),
 			initialTodos: options.initialTodos,

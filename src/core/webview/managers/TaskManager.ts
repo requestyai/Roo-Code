@@ -14,7 +14,7 @@
 
 import { RooCodeEventName } from "@roo-code/types"
 import * as vscode from "vscode"
-import { Task } from "../task/Task"
+import { Task } from "../../task/Task"
 
 export class TaskManager {
 	private taskStack: Task[] = []
@@ -147,6 +147,14 @@ export class TaskManager {
 	public isTaskActive(taskId: string): boolean {
 		const currentTask = this.getCurrentTask()
 		return currentTask ? currentTask.taskId === taskId : false
+	}
+
+	public getAllTasks(): Task[] {
+		return [...this.taskStack]
+	}
+
+	public getRootTask(): Task | undefined {
+		return this.taskStack.length > 0 ? this.taskStack[0] : undefined
 	}
 
 	/**
