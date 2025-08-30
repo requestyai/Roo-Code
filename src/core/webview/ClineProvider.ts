@@ -185,7 +185,13 @@ export class ClineProvider
 		}
 
 		// Initialize TaskManager with the callback
-		this.taskManager = new TaskManager(this.context, this.outputChannel, this.taskCreationCallback)
+		this.taskManager = new TaskManager(
+			this.context,
+			this.outputChannel,
+			this.taskCreationCallback,
+			() => this.getState(),
+			(task: Task) => this.performPreparationTasks(task),
+		)
 		this.stateManager.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Start configuration loading (which might trigger indexing) in the background.
@@ -650,7 +656,7 @@ export class ClineProvider
 	public async createTaskWithHistoryItem(historyItem: HistoryItem & { rootTask?: Task; parentTask?: Task }) {
 		await this.removeClineFromStack()
 
-		// If the history item has a saved mode, restore it and its associated API configuration.
+		// Handle mode restoration (keep in ClineProvider - mode management)
 		if (historyItem.mode) {
 			// Validate that the mode still exists
 			const customModes = await this.customModesManager.getCustomModes()
@@ -693,39 +699,8 @@ export class ClineProvider
 			}
 		}
 
-		const {
-			apiConfiguration,
-			diffEnabled: enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			experiments,
-			cloudUserInfo,
-			remoteControlEnabled,
-		} = await this.getState()
-
-		const task = new Task({
-			provider: this,
-			apiConfiguration,
-			enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			consecutiveMistakeLimit: apiConfiguration.consecutiveMistakeLimit,
-			historyItem,
-			experiments,
-			rootTask: historyItem.rootTask,
-			parentTask: historyItem.parentTask,
-			taskNumber: historyItem.number,
-			onCreated: this.taskCreationCallback,
-			enableBridge: BridgeOrchestrator.isEnabled(cloudUserInfo, remoteControlEnabled),
-		})
-
-		await this.addClineToStack(task)
-
-		this.log(
-			`[createTaskWithHistoryItem] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,
-		)
-
-		return task
+		// Delegate task creation to TaskManager
+		return await this.taskManager.createTaskWithHistoryItem(historyItem)
 	}
 
 	public async postMessageToWebview(message: ExtensionMessage) {
@@ -2111,6 +2086,7 @@ export class ClineProvider
 		options: CreateTaskOptions = {},
 		configuration: RooCodeSettings = {},
 	): Promise<Task> {
+		// Handle configuration settings (keep in ClineProvider for now)
 		if (configuration) {
 			await this.setValues(configuration)
 
@@ -2141,47 +2117,14 @@ export class ClineProvider
 			}
 		}
 
-		const {
-			apiConfiguration,
-			organizationAllowList,
-			diffEnabled: enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			experiments,
-			cloudUserInfo,
-			remoteControlEnabled,
-		} = await this.getState()
-
+		// Validation
+		const { apiConfiguration, organizationAllowList } = await this.getState()
 		if (!ProfileValidator.isProfileAllowed(apiConfiguration, organizationAllowList)) {
 			throw new OrganizationAllowListViolationError(t("common:errors.violated_organization_allowlist"))
 		}
 
-		const task = new Task({
-			provider: this,
-			apiConfiguration,
-			enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			consecutiveMistakeLimit: apiConfiguration.consecutiveMistakeLimit,
-			task: text,
-			images,
-			experiments,
-			rootTask: this.taskManager.getRootTask(),
-			parentTask,
-			taskNumber: this.taskManager.getTaskStackSize() + 1,
-			onCreated: this.taskCreationCallback,
-			enableBridge: BridgeOrchestrator.isEnabled(cloudUserInfo, remoteControlEnabled),
-			initialTodos: options.initialTodos,
-			...options,
-		})
-
-		await this.addClineToStack(task)
-
-		this.log(
-			`[createTask] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,
-		)
-
-		return task
+		// Delegate actual task creation to TaskManager
+		return await this.taskManager.createTask(text, images, parentTask, options, configuration)
 	}
 
 	public async cancelTask(): Promise<void> {
