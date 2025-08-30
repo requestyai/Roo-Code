@@ -89,7 +89,8 @@ import { Task } from "../task/Task"
 
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
-import { StateManager } from "./helpers/StateManager"
+import { StateManager } from "./managers/StateManager"
+import { TaskManager } from "./managers/TaskManager"
 import { webviewMessageHandler } from "./webviewMessageHandler"
 
 /**
@@ -110,7 +111,7 @@ export class ClineProvider
 	private disposables: vscode.Disposable[] = []
 	private webviewDisposables: vscode.Disposable[] = []
 	private view?: vscode.WebviewView | vscode.WebviewPanel
-	private clineStack: Task[] = []
+
 	private codeIndexStatusSubscription?: vscode.Disposable
 	private currentWorkspaceManager?: CodeIndexManager
 	private _workspaceTracker?: WorkspaceTracker // workSpaceTracker read-only for access outside this class
@@ -126,6 +127,7 @@ export class ClineProvider
 	public readonly providerSettingsManager: ProviderSettingsManager
 	public readonly customModesManager: CustomModesManager
 	private readonly stateManager: StateManager
+	private readonly taskManager: TaskManager
 
 	constructor(
 		readonly context: vscode.ExtensionContext,
@@ -140,37 +142,8 @@ export class ClineProvider
 
 		this.mdmService = mdmService
 		this.stateManager = new StateManager(this.contextProxy, this.cwd)
-		this.stateManager.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
-		// Start configuration loading (which might trigger indexing) in the background.
-		// Don't await, allowing activation to continue immediately.
-
-		// Register this provider with the telemetry service to enable it to add
-		// properties like mode and provider.
-		TelemetryService.instance.setProvider(this)
-
-		this._workspaceTracker = new WorkspaceTracker(this)
-
-		this.providerSettingsManager = new ProviderSettingsManager(this.context)
-
-		this.customModesManager = new CustomModesManager(this.context, async () => {
-			await this.postStateToWebview()
-		})
-
-		// Initialize MCP Hub through the singleton manager
-		McpServerManager.getInstance(this.context, this)
-			.then((hub) => {
-				this.mcpHub = hub
-				this.mcpHub.registerClient()
-			})
-			.catch((error) => {
-				this.log(`Failed to initialize MCP Hub: ${error}`)
-			})
-
-		this.marketplaceManager = new MarketplaceManager(this.context, this.customModesManager)
-
-		// Forward <most> task events to the provider.
-		// We do something fairly similar for the IPC-based API.
+		// Initialize task creation callback BEFORE TaskManager
 		this.taskCreationCallback = (instance: Task) => {
 			this.emit(RooCodeEventName.TaskCreated, instance)
 
@@ -210,6 +183,37 @@ export class ClineProvider
 				() => instance.off(RooCodeEventName.TaskIdle, onTaskIdle),
 			])
 		}
+
+		// Initialize TaskManager with the callback
+		this.taskManager = new TaskManager(this.context, this.outputChannel, this.taskCreationCallback)
+		this.stateManager.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
+
+		// Start configuration loading (which might trigger indexing) in the background.
+		// Don't await, allowing activation to continue immediately.
+
+		// Register this provider with the telemetry service to enable it to add
+		// properties like mode and provider.
+		TelemetryService.instance.setProvider(this)
+
+		this._workspaceTracker = new WorkspaceTracker(this)
+
+		this.providerSettingsManager = new ProviderSettingsManager(this.context)
+
+		this.customModesManager = new CustomModesManager(this.context, async () => {
+			await this.postStateToWebview()
+		})
+
+		// Initialize MCP Hub through the singleton manager
+		McpServerManager.getInstance(this.context, this)
+			.then((hub) => {
+				this.mcpHub = hub
+				this.mcpHub.registerClient()
+			})
+			.catch((error) => {
+				this.log(`Failed to initialize MCP Hub: ${error}`)
+			})
+
+		this.marketplaceManager = new MarketplaceManager(this.context, this.customModesManager)
 
 		// Initialize Roo Code Cloud profile sync.
 		this.initializeCloudProfileSync().catch((error) => {
@@ -381,11 +385,11 @@ export class ClineProvider
 	}
 
 	getTaskStackSize(): number {
-		return this.clineStack.length
+		return this.taskManager.getTaskStackSize()
 	}
 
 	public getCurrentTaskStack(): string[] {
-		return this.clineStack.map((cline) => cline.taskId)
+		return this.taskManager.getCurrentTaskStack()
 	}
 
 	// Remove the current task/cline instance (at the top of the stack), so this
@@ -2130,11 +2134,7 @@ export class ClineProvider
 	 */
 
 	public getCurrentTask(): Task | undefined {
-		if (this.clineStack.length === 0) {
-			return undefined
-		}
-
-		return this.clineStack[this.clineStack.length - 1]
+		return this.taskManager.getCurrentTask()
 	}
 
 	public getRecentTasks(): string[] {
@@ -2273,11 +2273,7 @@ export class ClineProvider
 	// Clear the current task without treating it as a subtask.
 	// This is used when the user cancels a task that is not a subtask.
 	public async clearTask(): Promise<void> {
-		if (this.clineStack.length > 0) {
-			const task = this.clineStack[this.clineStack.length - 1]
-			console.log(`[clearTask] clearing task ${task.taskId}.${task.instanceId}`)
-			await this.removeClineFromStack()
-		}
+		await this.taskManager.clearCurrentTask()
 	}
 
 	public resumeTask(taskId: string): void {
