@@ -13,7 +13,6 @@ import {
 	type UserSettingsConfig,
 	TelemetryEventName,
 	RooCodeSettings,
-	Experiments,
 	ExperimentId,
 } from "@roo-code/types"
 import { CloudService } from "@roo-code/cloud"
@@ -942,6 +941,23 @@ export const webviewMessageHandler = async (
 				// Silently fail - user hasn't configured Ollama yet
 				console.debug("Ollama models fetch failed:", error)
 			}
+			break
+		}
+		case "requestRequestyModels": {
+			// Specific handler for Requesty models only.
+			const { apiConfiguration: requestyApiConfiguration } = await provider.getState()
+			const requestyOptions = {
+				provider: "requesty" as const,
+				baseUrl: requestyApiConfiguration.requestyBaseUrl,
+				apiKey: requestyApiConfiguration.requestyApiKey,
+			}
+
+			// Flush cache and refresh to ensure fresh models.
+			await flushModels(requestyOptions, true)
+
+			const requestyModels = await getModels(requestyOptions)
+
+			provider.postMessageToWebview({ type: "requestyModels", requestyModels: requestyModels })
 			break
 		}
 		case "requestLmStudioModels": {
